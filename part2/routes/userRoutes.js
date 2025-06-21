@@ -1,160 +1,87 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Owner Dashboard - Dog Walking Service</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-</head>
-<body class="bg-light">
-  <div id="app" class="container py-4">
-    <h1 class="mb-4 text-primary">Owner Dashboard</h1>
+const express = require('express');
+const router = express.Router();
+const db = require('../models/db');
 
-    <!-- Logout Button -->
-    <button @click="logout" class="btn btn-danger mb-4 float-end">Log Out</button>
+// GET all users (for admin/testing)
+router.get('/', async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT user_id, username, email, role FROM Users');
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
 
-    <!-- Walk request form -->
-    <div class="card mb-4">
-      <div class="card-header bg-primary text-white">
-        Create New Walk Request
-      </div>
-      <div class="card-body">
-        <form @submit.prevent="submitWalkRequest">
-          <div class="mb-3">
-            <label class="form-label">Select Your Dog</label>
-            <select v-model="form.dog_id" class="form-select" required>
-              <option disabled value="">-- Choose a dog --</option>
-              <option v-for="dog in dogs" :value="dog.dog_id">{{ dog.name }}</option>
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Requested Date & Time</label>
-            <input v-model="form.requested_time" type="datetime-local" class="form-control" required>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Duration (minutes)</label>
-            <input v-model="form.duration_minutes" type="number" class="form-control" required>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Location</label>
-            <input v-model="form.location" type="text" class="form-control" required>
-          </div>
-          <button type="submit" class="btn btn-success">Create Walk</button>
-        </form>
-      </div>
-    </div>
+// POST a new user (simple signup)
+router.post('/register', async (req, res) => {
+  const { username, email, password, role } = req.body;
 
-    <!-- Success or error messages -->
-    <div v-if="message" class="alert alert-info">{{ message }}</div>
-    <div v-if="error" class="alert alert-danger">{{ error }}</div>
+  try {
+    const [result] = await db.query(`
+      INSERT INTO Users (username, email, password_hash, role)
+      VALUES (?, ?, ?, ?)
+    `, [username, email, password, role]);
 
-    <!-- List of walk requests -->
-    <h2 class="mb-3">My Walk Requests</h2>
-    <div class="row" v-if="walks.length > 0">
-      <div class="col-md-6 mb-4" v-for="walk in walks" :key="walk.request_id">
-        <div class="card">
-          <div class="card-body">
-            <h5 class="card-title">Request #{{ walk.request_id }}</h5>
-            <p class="card-text">
-              <strong>Dog:</strong> {{ walk.dog_name }} ({{ walk.size }})<br>
-              <strong>Date:</strong> {{ new Date(walk.requested_time).toLocaleString() }}<br>
-              <strong>Duration:</strong> {{ walk.duration_minutes }} minutes<br>
-              <strong>Location:</strong> {{ walk.location }}<br>
-              <strong>Status:</strong> {{ walk.status }}
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-    <p v-else>No walk requests yet.</p>
-  </div>
+    res.status(201).json({ message: 'User registered', user_id: result.insertId });
+  } catch (error) {
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
 
-  <script>
-    const { createApp, ref, onMounted } = Vue;
+// GET current session user
+router.get('/me', (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Not logged in' });
+  }
+  res.json(req.session.user);
+});
 
-    createApp({
-      setup() {
-        const form = ref({
-          dog_id: '',
-          requested_time: '',
-          duration_minutes: '',
-          location: ''
-        });
+// POST login - now supports session storage
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body;
 
-        const walks = ref([]);
-        const dogs = ref([]);
-        const message = ref('');
-        const error = ref('');
+  try {
+    const [rows] = await db.query(`
+      SELECT user_id, username, role FROM Users
+      WHERE email = ? AND password_hash = ?
+    `, [email, password]);
 
-        async function loadWalks() {
-          try {
-            const res = await fetch('/api/walks');
-            walks.value = await res.json();
-          } catch (err) {
-            error.value = 'Failed to load walk requests';
-          }
-        }
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
 
-        async function loadDogs() {
-          try {
-            const res = await fetch('/api/users/dogs');
-            if (!res.ok) throw new Error('Failed to load dog list');
-            dogs.value = await res.json();
-          } catch (err) {
-            error.value = err.message;
-          }
-        }
+    // Save user session
+    req.session.user = rows[0];
+    res.json({ message: 'Login successful', user: rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
 
-        async function submitWalkRequest() {
-          try {
-            const res = await fetch('/api/walks', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(form.value)
-            });
-            const result = await res.json();
+// POST logout - clear session
+router.post('/logout', (req, res) => {
+  req.session.destroy(err => {
+    if (err) return res.status(500).json({ error: 'Logout failed' });
+    res.json({ message: 'Logged out successfully' });
+  });
+});
 
-            if (!res.ok) throw new Error(result.error || 'Error submitting walk request');
+// GET all dogs owned by current logged-in user (for owner dashboard dropdown)
+router.get('/dogs', async (req, res) => {
+  if (!req.session.user || req.session.user.role !== 'owner') {
+    return res.status(401).json({ error: 'Unauthorized or not an owner' });
+  }
 
-            message.value = result.message;
-            error.value = '';
-            form.value = {
-              dog_id: '',
-              requested_time: '',
-              duration_minutes: '',
-              location: ''
-            };
-            loadWalks();
-          } catch (err) {
-            error.value = err.message;
-            message.value = '';
-          }
-        }
+  try {
+    const ownerId = req.session.user.user_id;
+    const [rows] = await db.query(
+      'SELECT dog_id, name FROM Dogs WHERE owner_id = ?',
+      [ownerId]
+    );
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch dogs' });
+  }
+});
 
-        async function logout() {
-          await fetch('/api/users/logout', { method: 'POST' });
-          window.location.href = '/';
-        }
-
-        onMounted(() => {
-          loadWalks();
-          loadDogs();
-        });
-
-        return {
-          form,
-          walks,
-          dogs,
-          message,
-          error,
-          submitWalkRequest,
-          logout
-        };
-      }
-    }).mount('#app');
-  </script>
-
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+module.exports = router;
