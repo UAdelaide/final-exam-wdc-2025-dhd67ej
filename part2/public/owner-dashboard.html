@@ -10,6 +10,7 @@
 <body class="bg-light">
   <div id="app" class="container py-4">
     <h1 class="mb-4 text-primary">Owner Dashboard</h1>
+    <button class="btn btn-outline-danger mb-3" id="logoutBtn">Logout</button>
 
     <!-- Walk request form -->
     <div class="card mb-4">
@@ -85,7 +86,7 @@
             const res = await fetch('/api/walks');
             walks.value = await res.json();
           } catch (err) {
-            error.value = 'Failed to load walk requests';
+            error.value = 'Failed to load walk requests.';
           }
         }
 
@@ -98,7 +99,7 @@
             });
             const result = await res.json();
 
-            if (!res.ok) throw new Error(result.error || 'Error submitting walk request');
+            if (!res.ok) throw new Error(result.error || 'Failed to submit request.');
 
             message.value = result.message;
             error.value = '';
@@ -128,6 +129,18 @@
         };
       }
     }).mount('#app');
+
+    // Logout handler
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      fetch('/api/users/logout', { method: 'POST' })
+        .then(res => {
+          if (res.ok) {
+            window.location.href = '/index.html';
+          } else {
+            alert('Logout failed. Please try again.');
+          }
+        });
+    });
   </script>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
