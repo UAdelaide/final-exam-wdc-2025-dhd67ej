@@ -1,4 +1,3 @@
--- 清除并重新创建数据库
 DROP DATABASE IF EXISTS DogWalkService;
 CREATE DATABASE DogWalkService;
 USE DogWalkService;
