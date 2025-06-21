@@ -12,11 +12,11 @@
     <h1 class="mb-4 text-success">Walker Dashboard</h1>
     <button class="btn btn-outline-danger mb-3" id="logoutBtn">Logout</button>
 
-    <!-- Alert messages -->
+    <!-- 提示信息 Alert messages -->
     <div v-if="message" class="alert alert-info">{{ message }}</div>
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
-    <!-- Walk requests list -->
+    <!-- 遛狗请求列表 Walk requests list -->
     <div v-if="walks.length > 0" class="row">
       <div class="col-md-6 mb-4" v-for="walk in walks" :key="walk.request_id">
         <div class="card">
@@ -44,8 +44,21 @@
         const walks = ref([]);
         const message = ref('');
         const error = ref('');
-        const user = 3; // Static user ID, should ideally come from session
+        const userId = ref(null); // 当前用户 ID
 
+        // 获取当前用户信息
+        async function getCurrentUser() {
+          try {
+            const res = await fetch('/api/users/me');
+            if (!res.ok) throw new Error('Not logged in');
+            const data = await res.json();
+            userId.value = data.user_id;
+          } catch (err) {
+            error.value = 'Failed to fetch user info';
+          }
+        }
+
+        // 加载遛狗请求列表
         async function loadWalkRequests() {
           try {
             const res = await fetch('/api/walks');
@@ -56,12 +69,17 @@
           }
         }
 
+        // 申请某个遛狗请求
         async function applyToWalk(requestId) {
+          if (!userId.value) {
+            error.value = 'User ID not found';
+            return;
+          }
           try {
             const res = await fetch(`/api/walks/${requestId}/apply`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ walker_id: user })
+              body: JSON.stringify({ walker_id: userId.value })
             });
             const result = await res.json();
 
@@ -75,8 +93,9 @@
           }
         }
 
-        onMounted(() => {
-          loadWalkRequests();
+        onMounted(async () => {
+          await getCurrentUser(); // 先获取用户
+          await loadWalkRequests(); // 然后加载请求
         });
 
         return {
@@ -88,7 +107,7 @@
       }
     }).mount('#app');
 
-    // Logout handler
+    // 登出按钮
     document.getElementById('logoutBtn').addEventListener('click', () => {
       fetch('/api/users/logout', { method: 'POST' })
         .then(res => {
