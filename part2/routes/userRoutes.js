@@ -66,4 +66,22 @@ router.post('/logout', (req, res) => {
   });
 });
 
+// GET all dogs owned by current logged-in user (for owner dashboard dropdown)
+router.get('/dogs', async (req, res) => {
+  if (!req.session.user || req.session.user.role !== 'owner') {
+    return res.status(401).json({ error: 'Unauthorized or not an owner' });
+  }
+
+  try {
+    const ownerId = req.session.user.user_id;
+    const [rows] = await db.query(
+      'SELECT dog_id, name FROM Dogs WHERE owner_id = ?',
+      [ownerId]
+    );
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch dogs' });
+  }
+});
+
 module.exports = router;
