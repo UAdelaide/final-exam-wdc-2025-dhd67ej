@@ -1,29 +1,28 @@
 const express = require('express');
 const path = require('path');
-const session = require('express-session');
+const session = require('express-session'); // ✅ 引入 session
 require('dotenv').config();
 
 const app = express();
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, '/public')));
-
+// ✅ 启用 session 中间件
 app.use(session({
-  secret: 'mySecret', // 可以使用 process.env.SECRET 更安全
+  secret: 'supersecretkey',       // 可以替换成你的密钥
   resave: false,
-  saveUninitialized: false,
-  cookie: { secure: false }
+  saveUninitialized: true,
+  cookie: { secure: false }       // 若为 https，请设为 true
 }));
 
-// 路由注册
+// Middleware
+app.use(express.json());
+app.use(express.static(path.join(__dirname, '/public')));
+
+// Routes
 const walkRoutes = require('./routes/walkRoutes');
 const userRoutes = require('./routes/userRoutes');
-const loginRoute = require('./routes/login');
 
 app.use('/api/walks', walkRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/login', loginRoute);
 
+// Export the app instead of listening here
 module.exports = app;
